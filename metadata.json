@@ -1,0 +1,8 @@
+{
+  "name": "TradingJournal",
+  "description": "Production-grade trading journal and performance analytics platform for disciplined traders.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
