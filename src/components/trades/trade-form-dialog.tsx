@@ -14,6 +14,7 @@ import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
 import { tradeFormSchema, type TradeFormData, type TradeFormInput } from '@/src/lib/validation/trade';
 import { calculateTradeMetrics } from '@/src/lib/calculations/trades';
+import { calculateSlPrice, calculateTpPrice, calculatePipsFromPrices } from '@/src/lib/calculations/pips';
 import { formatCurrency } from '@/src/lib/formatting/currency';
 import type { TradeWithAccount } from '@/src/types/trade';
 import type { TradingAccount } from '@/src/types/account';
@@ -58,6 +59,18 @@ export function TradeFormDialog({
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedMistakeIds, setSelectedMistakeIds] = useState<string[]>([]);
 
+  // Strict 24-hour time state variables (HH:mm format)
+  const [entryDate, setEntryDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [entryTime, setEntryTime] = useState<string>(() => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  });
+  const [exitDate, setExitDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
+  const [exitTime, setExitTime] = useState<string>(() => {
+    const d = new Date();
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  });
+
   const defaultAccount =
     defaultAccountId && defaultAccountId !== 'all'
       ? defaultAccountId
@@ -76,8 +89,8 @@ export function TradeFormDialog({
       trading_account_id: defaultAccount,
       symbol: '',
       direction: 'long',
-      entry_time: new Date().toISOString().slice(0, 16),
-      exit_time: new Date().toISOString().slice(0, 16),
+      entry_time: new Date().toISOString(),
+      exit_time: new Date().toISOString(),
       entry_price: 0,
       exit_price: 0,
       quantity: 1,
@@ -87,6 +100,7 @@ export function TradeFormDialog({
       fees: 0,
       swap: 0,
       risk_amount: undefined,
+      risk_percentage: undefined,
       status: 'closed',
       strategy: '',
       strategies: [],
@@ -99,15 +113,46 @@ export function TradeFormDialog({
     },
   });
 
+  const watchedAccountId = watch('trading_account_id');
   const watchedDirection = watch('direction');
+  const watchedSymbol = watch('symbol');
   const watchedEntryPrice = watch('entry_price');
   const watchedExitPrice = watch('exit_price');
   const watchedQuantity = watch('quantity');
   const watchedCommission = watch('commission');
-  const watchedFees = watch('fees');
-  const watchedSwap = watch('swap');
   const watchedRiskAmount = watch('risk_amount');
+  const watchedRiskPercentage = watch('risk_percentage');
   const watchedStatus = watch('status');
+
+  // Selected account for balance calculations
+  const selectedAccount = useMemo(() => {
+    return accounts.find((acc) => acc.id === watchedAccountId) || accounts[0];
+  }, [accounts, watchedAccountId]);
+
+  const accountBalance = useMemo(() => {
+    return Number(selectedAccount?.starting_balance) || 10000;
+  }, [selectedAccount]);
+
+  // Sync risk $ and risk % in real-time
+  const handleRiskAmountChange = (val: number | undefined) => {
+    setValue('risk_amount', val, { shouldValidate: true });
+    if (val !== undefined && Number.isFinite(val) && accountBalance > 0) {
+      const pct = Number(((val / accountBalance) * 100).toFixed(2));
+      setValue('risk_percentage', pct, { shouldValidate: false });
+    } else {
+      setValue('risk_percentage', undefined, { shouldValidate: false });
+    }
+  };
+
+  const handleRiskPercentageChange = (val: number | undefined) => {
+    setValue('risk_percentage', val, { shouldValidate: true });
+    if (val !== undefined && Number.isFinite(val) && accountBalance > 0) {
+      const amt = Number((accountBalance * (val / 100)).toFixed(2));
+      setValue('risk_amount', amt, { shouldValidate: false });
+    } else {
+      setValue('risk_amount', undefined, { shouldValidate: false });
+    }
+  };
 
   const loadMetadata = useCallback(async () => {
     if (!userId) return;
@@ -134,23 +179,23 @@ export function TradeFormDialog({
     }
 
     return calculateTradeMetrics({
+      symbol: watchedSymbol,
       direction: watchedDirection,
       entry_price: Number(watchedEntryPrice),
       exit_price: watchedExitPrice ? Number(watchedExitPrice) : null,
       quantity: Number(watchedQuantity),
       commission: Number(watchedCommission) || 0,
-      fees: Number(watchedFees) || 0,
-      swap: Number(watchedSwap) || 0,
+      fees: 0,
+      swap: 0,
       risk_amount: watchedRiskAmount ? Number(watchedRiskAmount) : null,
     });
   }, [
+    watchedSymbol,
     watchedDirection,
     watchedEntryPrice,
     watchedExitPrice,
     watchedQuantity,
     watchedCommission,
-    watchedFees,
-    watchedSwap,
     watchedRiskAmount,
   ]);
 
@@ -185,25 +230,47 @@ export function TradeFormDialog({
         setSelectedTagIds(initialTagIds);
         setSelectedMistakeIds(initialMistakeIds);
 
+        // Entry & exit time parsing
+        const entryD = tradeToEdit.entry_time ? new Date(tradeToEdit.entry_time) : new Date();
+        if (!isNaN(entryD.getTime())) {
+          setEntryDate(entryD.toISOString().slice(0, 10));
+          setEntryTime(`${String(entryD.getHours()).padStart(2, '0')}:${String(entryD.getMinutes()).padStart(2, '0')}`);
+        }
+
+        if (tradeToEdit.exit_time) {
+          const exitD = new Date(tradeToEdit.exit_time);
+          if (!isNaN(exitD.getTime())) {
+            setExitDate(exitD.toISOString().slice(0, 10));
+            setExitTime(`${String(exitD.getHours()).padStart(2, '0')}:${String(exitD.getMinutes()).padStart(2, '0')}`);
+          }
+        }
+
+        // Convert absolute SL/TP prices from DB to pips for form display
+        const entryP = Number(tradeToEdit.entry_price) || 0;
+        const sym = tradeToEdit.symbol || '';
+        const slPips = tradeToEdit.stop_loss ? calculatePipsFromPrices(entryP, Number(tradeToEdit.stop_loss), sym) : undefined;
+        const tpPips = tradeToEdit.take_profit ? calculatePipsFromPrices(entryP, Number(tradeToEdit.take_profit), sym) : undefined;
+
+        const riskAmt = tradeToEdit.risk_amount ? Number(tradeToEdit.risk_amount) : undefined;
+        const accBal = Number(tradeToEdit.account?.starting_balance) || 10000;
+        const riskPct = riskAmt && accBal > 0 ? Number(((riskAmt / accBal) * 100).toFixed(2)) : undefined;
+
         reset({
           trading_account_id: tradeToEdit.trading_account_id,
           symbol: tradeToEdit.symbol,
           direction: tradeToEdit.direction,
-          entry_time: tradeToEdit.entry_time
-            ? new Date(tradeToEdit.entry_time).toISOString().slice(0, 16)
-            : new Date().toISOString().slice(0, 16),
-          exit_time: tradeToEdit.exit_time
-            ? new Date(tradeToEdit.exit_time).toISOString().slice(0, 16)
-            : null,
-          entry_price: Number(tradeToEdit.entry_price),
+          entry_time: tradeToEdit.entry_time || new Date().toISOString(),
+          exit_time: tradeToEdit.exit_time || null,
+          entry_price: entryP,
           exit_price: tradeToEdit.exit_price ? Number(tradeToEdit.exit_price) : null,
           quantity: Number(tradeToEdit.quantity),
-          stop_loss: tradeToEdit.stop_loss ? Number(tradeToEdit.stop_loss) : undefined,
-          take_profit: tradeToEdit.take_profit ? Number(tradeToEdit.take_profit) : undefined,
+          stop_loss: slPips ?? undefined,
+          take_profit: tpPips ?? undefined,
           commission: Number(tradeToEdit.commission) || 0,
-          fees: Number(tradeToEdit.fees) || 0,
-          swap: Number(tradeToEdit.swap) || 0,
-          risk_amount: tradeToEdit.risk_amount ? Number(tradeToEdit.risk_amount) : undefined,
+          fees: 0,
+          swap: 0,
+          risk_amount: riskAmt,
+          risk_percentage: riskPct,
           status: tradeToEdit.status,
           strategy: tradeToEdit.strategy || '',
           strategies: tradeToEdit.strategies?.map((s) => s.name) || (tradeToEdit.strategy ? [tradeToEdit.strategy] : []),
@@ -219,12 +286,18 @@ export function TradeFormDialog({
         setSelectedTagIds([]);
         setSelectedMistakeIds([]);
 
+        const now = new Date();
+        setEntryDate(now.toISOString().slice(0, 10));
+        setEntryTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+        setExitDate(now.toISOString().slice(0, 10));
+        setExitTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+
         reset({
           trading_account_id: defaultAccount,
           symbol: '',
           direction: 'long',
-          entry_time: new Date().toISOString().slice(0, 16),
-          exit_time: new Date().toISOString().slice(0, 16),
+          entry_time: new Date().toISOString(),
+          exit_time: new Date().toISOString(),
           entry_price: undefined as unknown as number,
           exit_price: undefined as unknown as number,
           quantity: 1,
@@ -234,6 +307,7 @@ export function TradeFormDialog({
           fees: 0,
           swap: 0,
           risk_amount: undefined,
+          risk_percentage: undefined,
           status: 'closed',
           strategy: '',
           strategies: [],
@@ -279,11 +353,32 @@ export function TradeFormDialog({
     setIsSubmitting(true);
     setFormError(null);
 
+    // Convert stop loss and take profit pips to absolute prices for database storage
+    const entryP = Number(data.entry_price);
+    const sym = data.symbol;
+    const absSl = data.stop_loss !== null && data.stop_loss !== undefined
+      ? calculateSlPrice(data.direction, entryP, data.stop_loss, sym)
+      : null;
+    const absTp = data.take_profit !== null && data.take_profit !== undefined
+      ? calculateTpPrice(data.direction, entryP, data.take_profit, sym)
+      : null;
+
+    // Validate 24h time format HH:mm
+    const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    const validEntryTime = timeRegex.test(entryTime) ? entryTime : '09:30';
+    const validExitTime = timeRegex.test(exitTime) ? exitTime : '16:00';
+
+    // Construct ISO timestamps from strict 24h entryDate/entryTime and exitDate/exitTime
+    const entryDateTime = `${entryDate || new Date().toISOString().slice(0, 10)}T${validEntryTime}:00Z`;
+    const exitDateTime = watchedStatus === 'closed' && exitDate && exitTime ? `${exitDate}T${validExitTime}:00Z` : null;
+
     // Format timestamps to ISO strings
     const payload: TradeFormData = {
       ...data,
-      entry_time: new Date(data.entry_time).toISOString(),
-      exit_time: data.exit_time ? new Date(data.exit_time).toISOString() : null,
+      stop_loss: absSl,
+      take_profit: absTp,
+      entry_time: entryDateTime,
+      exit_time: exitDateTime,
       strategy_ids: selectedStrategyIds,
       tag_ids: selectedTagIds,
       mistake_ids: selectedMistakeIds,
@@ -337,7 +432,7 @@ export function TradeFormDialog({
               >
                 {accounts.map((acc) => (
                   <option key={acc.id} value={acc.id} className="bg-zinc-900">
-                    {acc.name} ({acc.account_type})
+                    {acc.name} ({acc.account_type}) - Bal: ${Number(acc.starting_balance || 0).toLocaleString()}
                   </option>
                 ))}
               </select>
@@ -381,7 +476,7 @@ export function TradeFormDialog({
               <Label htmlFor="trade-sym">Symbol / Ticker *</Label>
               <Input
                 id="trade-sym"
-                placeholder="NQ, ES, AAPL..."
+                placeholder="EURUSD, NQ, AAPL..."
                 {...register('symbol')}
                 className={errors.symbol ? 'border-red-800 uppercase font-mono' : 'uppercase font-mono'}
               />
@@ -426,7 +521,7 @@ export function TradeFormDialog({
                 id="trade-entry-price"
                 type="number"
                 step="any"
-                placeholder="18500.00"
+                placeholder="1.16500"
                 {...register('entry_price', { valueAsNumber: true })}
                 className="font-mono"
               />
@@ -443,7 +538,7 @@ export function TradeFormDialog({
                 id="trade-exit-price"
                 type="number"
                 step="any"
-                placeholder="18550.00"
+                placeholder="1.16800"
                 {...register('exit_price', { valueAsNumber: true })}
                 className="font-mono"
               />
@@ -453,78 +548,148 @@ export function TradeFormDialog({
             </div>
           </div>
 
-          {/* Timestamps */}
+          {/* Entry Time & Exit Time in Strict 24-Hour Text Format (HH:mm) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="trade-entry-time">Entry Time *</Label>
-              <Input
-                id="trade-entry-time"
-                type="datetime-local"
-                {...register('entry_time')}
-                className="font-mono text-xs"
-              />
+              <Label className="flex items-center justify-between">
+                <span>Entry Time (24h) *</span>
+                <span className="text-[10px] text-emerald-400 font-mono">e.g. 09:30 or 13:45</span>
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="date"
+                  value={entryDate}
+                  onChange={(e) => setEntryDate(e.target.value)}
+                  className="font-mono text-xs bg-zinc-950"
+                />
+                <Input
+                  type="text"
+                  maxLength={5}
+                  value={entryTime}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9:]/g, '');
+                    if (raw.length === 2 && !raw.includes(':') && entryTime.length === 1) {
+                      setEntryTime(raw + ':');
+                    } else if (raw.length <= 5) {
+                      setEntryTime(raw);
+                    }
+                  }}
+                  placeholder="13:45"
+                  className="font-mono text-xs bg-zinc-950 text-center"
+                />
+              </div>
               {errors.entry_time && (
                 <p className="text-[11px] text-red-400">{errors.entry_time.message}</p>
               )}
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="trade-exit-time">
-                Exit Time {watchedStatus === 'closed' ? '*' : '(Optional)'}
+              <Label className="flex items-center justify-between">
+                <span>Exit Time (24h) {watchedStatus === 'closed' ? '*' : '(Optional)'}</span>
+                <span className="text-[10px] text-emerald-400 font-mono">e.g. 16:20 or 21:05</span>
               </Label>
-              <Input
-                id="trade-exit-time"
-                type="datetime-local"
-                {...register('exit_time')}
-                className="font-mono text-xs"
-              />
+              <div className="grid grid-cols-2 gap-2">
+                <Input
+                  type="date"
+                  value={exitDate}
+                  onChange={(e) => setExitDate(e.target.value)}
+                  className="font-mono text-xs bg-zinc-950"
+                />
+                <Input
+                  type="text"
+                  maxLength={5}
+                  value={exitTime}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9:]/g, '');
+                    if (raw.length === 2 && !raw.includes(':') && exitTime.length === 1) {
+                      setExitTime(raw + ':');
+                    } else if (raw.length <= 5) {
+                      setExitTime(raw);
+                    }
+                  }}
+                  placeholder="16:20"
+                  className="font-mono text-xs bg-zinc-950 text-center"
+                />
+              </div>
               {errors.exit_time && (
                 <p className="text-[11px] text-red-400">{errors.exit_time.message}</p>
               )}
             </div>
           </div>
 
-          {/* Stop Loss, Take Profit, Risk */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Stop Loss (pips) & Take Profit (pips) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="trade-sl">Stop Loss (Price)</Label>
+              <Label htmlFor="trade-sl">Stop Loss (pips)</Label>
               <Input
                 id="trade-sl"
                 type="number"
                 step="any"
-                placeholder="18450.00"
+                placeholder="20"
                 {...register('stop_loss', { valueAsNumber: true })}
                 className="font-mono"
               />
+              {errors.stop_loss && (
+                <p className="text-[11px] text-red-400">{errors.stop_loss.message}</p>
+              )}
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="trade-tp">Take Profit (Price)</Label>
+              <Label htmlFor="trade-tp">Take Profit (pips)</Label>
               <Input
                 id="trade-tp"
                 type="number"
                 step="any"
-                placeholder="18600.00"
+                placeholder="30"
                 {...register('take_profit', { valueAsNumber: true })}
                 className="font-mono"
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="trade-risk">Planned Risk ($)</Label>
-              <Input
-                id="trade-risk"
-                type="number"
-                step="any"
-                placeholder="100.00"
-                {...register('risk_amount', { valueAsNumber: true })}
-                className="font-mono"
-              />
+              {errors.take_profit && (
+                <p className="text-[11px] text-red-400">{errors.take_profit.message}</p>
+              )}
             </div>
           </div>
 
-          {/* Commission, Fees, Swap */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* Planned Risk Section ($ + %) & Commission */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-zinc-900/50 border border-zinc-800 rounded-lg">
+            <div className="space-y-1.5">
+              <Label htmlFor="trade-risk-amt" className="text-zinc-200">Planned Risk ($)</Label>
+              <Input
+                id="trade-risk-amt"
+                type="number"
+                step="any"
+                placeholder="100.00"
+                value={watchedRiskAmount !== undefined && watchedRiskAmount !== null && !isNaN(watchedRiskAmount as number) ? watchedRiskAmount : ''}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? undefined : Number(e.target.value);
+                  handleRiskAmountChange(val);
+                }}
+                className="font-mono bg-zinc-950"
+              />
+              {errors.risk_amount && (
+                <p className="text-[11px] text-red-400">{errors.risk_amount.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="trade-risk-pct" className="text-zinc-200">Planned Risk (%)</Label>
+              <Input
+                id="trade-risk-pct"
+                type="number"
+                step="any"
+                placeholder="1.00"
+                value={watchedRiskPercentage !== undefined && watchedRiskPercentage !== null && !isNaN(watchedRiskPercentage as number) ? watchedRiskPercentage : ''}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? undefined : Number(e.target.value);
+                  handleRiskPercentageChange(val);
+                }}
+                className="font-mono bg-zinc-950"
+              />
+              {errors.risk_percentage && (
+                <p className="text-[11px] text-red-400">{errors.risk_percentage.message}</p>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="trade-comm">Commission ($)</Label>
               <Input
@@ -533,32 +698,11 @@ export function TradeFormDialog({
                 step="any"
                 placeholder="4.50"
                 {...register('commission', { valueAsNumber: true })}
-                className="font-mono"
+                className="font-mono bg-zinc-950"
               />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="trade-fees">Fees ($)</Label>
-              <Input
-                id="trade-fees"
-                type="number"
-                step="any"
-                placeholder="1.20"
-                {...register('fees', { valueAsNumber: true })}
-                className="font-mono"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="trade-swap">Swap / Carry ($)</Label>
-              <Input
-                id="trade-swap"
-                type="number"
-                step="any"
-                placeholder="0.00"
-                {...register('swap', { valueAsNumber: true })}
-                className="font-mono"
-              />
+              {errors.commission && (
+                <p className="text-[11px] text-red-400">{errors.commission.message}</p>
+              )}
             </div>
           </div>
 
@@ -600,7 +744,7 @@ export function TradeFormDialog({
               <div>
                 <span className="text-[10px] text-zinc-400 block uppercase">R Multiple</span>
                 <span className="text-sm font-semibold tabular-nums text-zinc-200 block">
-                  {liveMetrics.r_multiple !== null ? `${liveMetrics.r_multiple > 0 ? '+' : ''}${liveMetrics.r_multiple} R` : '—'}
+                  {liveMetrics.r_multiple !== null ? `${liveMetrics.r_multiple > 0 ? '+' : ''}${liveMetrics.r_multiple}R` : '—'}
                 </span>
               </div>
             </div>

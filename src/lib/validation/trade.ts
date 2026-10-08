@@ -42,12 +42,12 @@ export const tradeFormSchema = z
       .positive('Quantity must be greater than 0'),
     stop_loss: z
       .number()
-      .positive('Stop loss must be greater than 0')
+      .min(0, 'Stop loss pips cannot be negative')
       .optional()
       .nullable(),
     take_profit: z
       .number()
-      .positive('Take profit must be greater than 0')
+      .min(0, 'Take profit pips cannot be negative')
       .optional()
       .nullable(),
     commission: z
@@ -63,7 +63,12 @@ export const tradeFormSchema = z
       .default(0),
     risk_amount: z
       .number()
-      .min(0, 'Risk amount cannot be negative')
+      .min(0, 'Planned risk amount cannot be negative')
+      .optional()
+      .nullable(),
+    risk_percentage: z
+      .number()
+      .min(0, 'Planned risk percentage cannot be negative')
       .optional()
       .nullable(),
     status: tradeStatusEnum.default('closed'),

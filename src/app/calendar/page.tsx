@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/ca
 import { Button } from '@/src/components/ui/button';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, TrendingUp, TrendingDown, Award, BookOpen } from 'lucide-react';
 import { useAuth } from '@/src/hooks/useAuth';
+import { useTradingAccounts } from '@/src/hooks/useTradingAccounts';
 import { TradeService } from '@/src/lib/services/trade-service';
 import type { TradeWithAccount } from '@/src/types/trade';
 
@@ -35,6 +36,7 @@ function getLocalTradingDate(dateString: string, timezone: string = 'UTC'): stri
 export function CalendarPage() {
   const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const { accounts, selectedAccountId, setSelectedAccountId } = useTradingAccounts();
 
   const [trades, setTrades] = useState<TradeWithAccount[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -48,12 +50,21 @@ export function CalendarPage() {
     async function loadTrades() {
       if (!user) return;
       setLoading(true);
-      const { data } = await TradeService.getTrades(user.id, { limit: 2000 });
+      const accountId = selectedAccountId === 'all' ? undefined : selectedAccountId;
+      console.log('Loading trades for accountId:', accountId);
+      const { data, error } = await TradeService.getTrades(user.id, {
+        trading_account_id: accountId,
+        limit: 2000,
+      });
+      if (error) {
+        console.error('Error loading trades:', error);
+      }
+      console.log('Loaded trades count:', data?.length);
       setTrades(data || []);
       setLoading(false);
     }
     loadTrades();
-  }, [user]);
+  }, [user, selectedAccountId]);
 
   // Year and month for calendar
   const year = currentDate.getFullYear();
@@ -191,6 +202,18 @@ export function CalendarPage() {
         description={`Monthly P&L heat-map and daily performance respecting your timezone (${userTimezone}).`}
         actions={
           <div className="flex items-center gap-2">
+            <select
+              value={selectedAccountId}
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+              className="bg-zinc-900 border border-zinc-800 text-zinc-200 text-xs rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-emerald-500 font-mono"
+            >
+              <option value="all">All Accounts ({accounts.length})</option>
+              {accounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.name} ({acc.broker_name || 'Broker'})
+                </option>
+              ))}
+            </select>
             <Button variant="outline" size="sm" onClick={handlePrevMonth} className="h-8 w-8 p-0">
               <ChevronLeft className="w-4 h-4" />
             </Button>

@@ -84,6 +84,7 @@ export class TradeService {
     }
 
     const metrics = calculateTradeMetrics({
+      symbol: tradeData.symbol,
       direction: tradeData.direction,
       entry_price: tradeData.entry_price,
       exit_price: tradeData.exit_price ?? null,
@@ -500,6 +501,7 @@ export class TradeService {
     const riskAmount = updates.risk_amount !== undefined ? updates.risk_amount : current.risk_amount;
 
     const metrics = calculateTradeMetrics({
+      symbol: updates.symbol ?? current.symbol,
       direction,
       entry_price: entryPrice,
       exit_price: exitPrice,

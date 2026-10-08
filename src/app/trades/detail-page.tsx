@@ -6,8 +6,9 @@ import { TradeService } from '@/src/lib/services/trade-service';
 import type { TradeWithAccount } from '@/src/types/trade';
 import type { TradeFormData } from '@/src/lib/validation/trade';
 import { formatCurrency, formatPercentage } from '@/src/lib/formatting/currency';
-import { formatDate } from '@/src/lib/formatting/date';
+import { formatDate, formatDateTime, formatTime24 } from '@/src/lib/formatting/date';
 import { formatTradeDuration } from '@/src/lib/formatting/duration';
+import { calculatePipsFromPrices } from '@/src/lib/calculations/pips';
 import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/card';
 import { Button } from '@/src/components/ui/button';
 import { TradeFormDialog } from '@/src/components/trades/trade-form-dialog';
@@ -32,8 +33,10 @@ import {
 export function TradeDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { accounts } = useTradingAccounts();
+
+  const userTimezone = profile?.timezone || 'UTC';
 
   const [trade, setTrade] = useState<TradeWithAccount | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -78,8 +81,8 @@ export function TradeDetailPage() {
       stop_loss: data.stop_loss || null,
       take_profit: data.take_profit || null,
       commission: data.commission,
-      fees: data.fees,
-      swap: data.swap,
+      fees: 0,
+      swap: 0,
       risk_amount: data.risk_amount || null,
       status: data.status,
       strategies: (data as any).strategies || [],
@@ -141,6 +144,17 @@ export function TradeDetailPage() {
   const isPos = trade.net_pnl > 0;
   const isNeg = trade.net_pnl < 0;
   const duration = formatTradeDuration(trade.entry_time, trade.exit_time);
+
+  // Derived pips for SL and TP
+  const entryP = Number(trade.entry_price) || 0;
+  const sym = trade.symbol || '';
+  const slPips = trade.stop_loss ? calculatePipsFromPrices(entryP, Number(trade.stop_loss), sym) : null;
+  const tpPips = trade.take_profit ? calculatePipsFromPrices(entryP, Number(trade.take_profit), sym) : null;
+
+  // Account balance and planned risk percentage
+  const accBal = Number(trade.account?.starting_balance) || 10000;
+  const riskAmt = trade.risk_amount !== null && trade.risk_amount !== undefined ? Number(trade.risk_amount) : null;
+  const riskPct = riskAmt !== null && accBal > 0 ? (riskAmt / accBal) * 100 : null;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12">
@@ -252,7 +266,7 @@ export function TradeDetailPage() {
             </span>
             <span className="text-xl sm:text-2xl font-mono tabular-nums font-bold text-zinc-100 mt-1 block">
               {trade.r_multiple !== null
-                ? `${trade.r_multiple > 0 ? '+' : ''}${trade.r_multiple} R`
+                ? `${trade.r_multiple > 0 ? '+' : ''}${trade.r_multiple}R`
                 : '—'}
             </span>
           </CardContent>
@@ -303,65 +317,47 @@ export function TradeDetailPage() {
             </div>
 
             <div>
-              <span className="text-zinc-400 text-[11px] block">Entry Time</span>
+              <span className="text-zinc-400 text-[11px] block">Entry Time (24h)</span>
               <span className="text-zinc-200 tabular-nums">
-                {formatDate(trade.entry_time)}
+                {formatDate(trade.entry_time)} {formatTime24(trade.entry_time, userTimezone)}
               </span>
             </div>
 
             <div>
-              <span className="text-zinc-400 text-[11px] block">Exit Time</span>
+              <span className="text-zinc-400 text-[11px] block">Exit Time (24h)</span>
               <span className="text-zinc-200 tabular-nums">
-                {trade.exit_time ? formatDate(trade.exit_time) : 'Open'}
+                {trade.exit_time ? `${formatDate(trade.exit_time)} ${formatTime24(trade.exit_time, userTimezone)}` : 'Open'}
               </span>
             </div>
 
             <div>
-              <span className="text-zinc-400 text-[11px] block">Planned Risk ($)</span>
-              <span className="text-zinc-200 tabular-nums">
-                {trade.risk_amount ? formatCurrency(trade.risk_amount) : 'Unassigned'}
-              </span>
+              <span className="text-zinc-400 text-[11px] block">Planned Risk</span>
+              <div className="text-zinc-200 tabular-nums space-y-0.5">
+                <div>{riskAmt !== null ? formatCurrency(riskAmt) : 'Unassigned'}</div>
+                <div className="text-[11px] text-zinc-400">{riskPct !== null ? `${riskPct.toFixed(2)}%` : '—'}</div>
+              </div>
             </div>
 
             <div>
-              <span className="text-zinc-400 text-[11px] block">Stop Loss</span>
-              <span className="text-zinc-200 tabular-nums">
-                {trade.stop_loss ? Number(trade.stop_loss).toFixed(2) : 'None'}
-              </span>
+              <span className="text-zinc-400 text-[11px] block">Stop Loss (pips)</span>
+              <div className="text-zinc-200 tabular-nums space-y-0.5">
+                <span className="font-semibold text-emerald-400">{slPips !== null ? `${slPips} pips` : 'None'}</span>
+                {trade.stop_loss && <div className="text-[10px] text-zinc-400">({Number(trade.stop_loss).toFixed(5)})</div>}
+              </div>
             </div>
 
             <div>
-              <span className="text-zinc-400 text-[11px] block">Take Profit</span>
-              <span className="text-zinc-200 tabular-nums">
-                {trade.take_profit ? Number(trade.take_profit).toFixed(2) : 'None'}
-              </span>
+              <span className="text-zinc-400 text-[11px] block">Take Profit (pips)</span>
+              <div className="text-zinc-200 tabular-nums space-y-0.5">
+                <span className="font-semibold text-emerald-400">{tpPips !== null ? `${tpPips} pips` : 'None'}</span>
+                {trade.take_profit && <div className="text-[10px] text-zinc-400">({Number(trade.take_profit).toFixed(5)})</div>}
+              </div>
             </div>
 
             <div>
               <span className="text-zinc-400 text-[11px] block">Commission</span>
               <span className="text-zinc-200 tabular-nums">
-                {formatCurrency(Number(trade.commission))}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-zinc-400 text-[11px] block">Broker Fees</span>
-              <span className="text-zinc-200 tabular-nums">
-                {formatCurrency(Number(trade.fees))}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-zinc-400 text-[11px] block">Overnight Swap</span>
-              <span className="text-zinc-200 tabular-nums">
-                {formatCurrency(Number(trade.swap))}
-              </span>
-            </div>
-
-            <div>
-              <span className="text-zinc-400 text-[11px] block">Total Trade Costs</span>
-              <span className="text-zinc-200 tabular-nums font-semibold">
-                {formatCurrency(Number(trade.commission) + Number(trade.fees) + Number(trade.swap))}
+                {formatCurrency(Number(trade.commission) || 0)}
               </span>
             </div>
           </CardContent>

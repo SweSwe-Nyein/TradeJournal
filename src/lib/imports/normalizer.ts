@@ -205,6 +205,7 @@ export function normalizeCsvRow(
 
   if (direction && entryPrice && quantity) {
     const metrics = calculateTradeMetrics({
+      symbol,
       direction,
       entry_price: entryPrice,
       exit_price: exitPrice,

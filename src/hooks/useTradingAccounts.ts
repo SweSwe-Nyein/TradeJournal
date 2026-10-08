@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { supabase, getSupabaseConfig } from '@/src/lib/supabase/client';
 import { useAuth } from './useAuth';
+import { TradeService } from '@/src/lib/services/trade-service';
+import type { TradeWithAccount } from '@/src/types/trade';
 import type {
   TradingAccount,
   TradingAccountInsert,
@@ -18,6 +20,7 @@ export function useTradingAccounts() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
+  const [trades, setTrades] = useState<TradeWithAccount[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,10 +65,11 @@ export function useTradingAccounts() {
   // Storage key for demo/sandbox user
   const demoStorageKey = `${LOCAL_STORAGE_PREFIX}${user?.id || 'demo'}`;
 
-  // Fetch accounts from Supabase or localStorage fallback
+  // Fetch accounts and trades from Supabase or localStorage fallback
   const fetchAccounts = useCallback(async () => {
     if (!user) {
       setAccounts([]);
+      setTrades([]);
       setIsLoading(false);
       return;
     }
@@ -73,8 +77,13 @@ export function useTradingAccounts() {
     setIsLoading(true);
     setError(null);
 
-    if (isConfigured) {
-      try {
+    try {
+      const tradesRes = await TradeService.getTrades(user.id, { limit: 5000 });
+      if (tradesRes.data) {
+        setTrades(tradesRes.data);
+      }
+
+      if (isConfigured) {
         const { data, error: sbError } = await supabase
           .from('trading_accounts')
           .select('*')
@@ -94,43 +103,35 @@ export function useTradingAccounts() {
         } else {
           setAccounts((data as unknown as TradingAccount[]) || []);
         }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : 'Failed to fetch accounts';
-        setError(message);
-      } finally {
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    // Demo/sandbox mode
-    try {
-      const stored = localStorage.getItem(demoStorageKey);
-      if (stored) {
-        const parsed = JSON.parse(stored) as TradingAccount[];
-        setAccounts(parsed);
       } else {
-        // Pre-seed an initial default trading account so the user can immediately experience the UI
-        const defaultAccounts: TradingAccount[] = [
-          {
-            id: 'a0000000-0000-4000-8000-000000000001',
-            user_id: user.id,
-            name: 'Apex 50K PA',
-            account_type: 'prop_firm',
-            broker_name: 'Tradovate',
-            starting_balance: 50000.0,
-            current_balance: 50000.0,
-            currency: 'USD',
-            timezone: 'America/New_York',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
-        ];
-        localStorage.setItem(demoStorageKey, JSON.stringify(defaultAccounts));
-        setAccounts(defaultAccounts);
+        // Demo/sandbox mode
+        const stored = localStorage.getItem(demoStorageKey);
+        if (stored) {
+          const parsed = JSON.parse(stored) as TradingAccount[];
+          setAccounts(parsed);
+        } else {
+          const defaultAccounts: TradingAccount[] = [
+            {
+              id: 'a0000000-0000-4000-8000-000000000001',
+              user_id: user.id,
+              name: 'Apex 50K PA',
+              account_type: 'prop_firm',
+              broker_name: 'Tradovate',
+              starting_balance: 50000.0,
+              current_balance: 50000.0,
+              currency: 'USD',
+              timezone: 'America/New_York',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+          ];
+          localStorage.setItem(demoStorageKey, JSON.stringify(defaultAccounts));
+          setAccounts(defaultAccounts);
+        }
       }
-    } catch {
-      setAccounts([]);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to fetch accounts and trades';
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -169,10 +170,6 @@ export function useTradingAccounts() {
 
         if (sbError) {
           if (sbError.code === 'PGRST205') {
-            const setupMsg =
-              "Supabase database setup required: The 'trading_accounts' table does not exist in PostgreSQL. Click 'Initialize Database' in the top banner to copy and run the setup script.";
-            console.warn(setupMsg);
-            setError(setupMsg);
             const fallbackAccount: TradingAccount = {
               id: typeof crypto !== 'undefined' && crypto.randomUUID
                 ? crypto.randomUUID()
@@ -251,14 +248,24 @@ export function useTradingAccounts() {
 
     setError(null);
 
+    // Calculate current balance = starting balance + cumulative net P&L for this account
+    const accountTrades = trades.filter((t) => t.trading_account_id === id);
+    const netPnL = accountTrades.reduce((sum, t) => sum + (Number(t.net_pnl) || 0), 0);
+    const existingAcc = accounts.find((a) => a.id === id);
+    const newStarting = payload.starting_balance !== undefined ? Number(payload.starting_balance) : (existingAcc ? Number(existingAcc.starting_balance) || 0 : 0);
+    const computedCurrent = newStarting + netPnL;
+
+    const updatePayload = {
+      ...payload,
+      current_balance: computedCurrent,
+      updated_at: new Date().toISOString(),
+    };
+
     if (isConfigured) {
       try {
         const { data, error: sbError } = await supabase
           .from('trading_accounts')
-          .update({
-            ...payload,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updatePayload)
           .eq('id', id)
           .eq('user_id', user.id)
           .select()
@@ -284,8 +291,7 @@ export function useTradingAccounts() {
       if (a.id === id) {
         return {
           ...a,
-          ...payload,
-          updated_at: new Date().toISOString(),
+          ...updatePayload,
         } as TradingAccount;
       }
       return a;
@@ -352,16 +358,17 @@ export function useTradingAccounts() {
     return accounts.find((a) => a.id === selectedAccountId) || null;
   }, [accounts, selectedAccountId]);
 
-  // Summary calculation (Starting balance, Current balance, Net P&L)
+  // Summary calculation (Starting balance, Current balance derived as Starting Balance + cumulative net P&L)
   const summary: TradingAccountSummary = useMemo(() => {
     if (selectedAccount) {
       const starting = Number(selectedAccount.starting_balance) || 0;
-      const current = Number(selectedAccount.current_balance) || 0;
-      const netPnL = current - starting;
+      const accountTrades = trades.filter((t) => t.trading_account_id === selectedAccount.id);
+      const netPnL = accountTrades.reduce((sum, t) => sum + (Number(t.net_pnl) || 0), 0);
+      const currentBalance = starting + netPnL;
       const netPnLPercentage = starting > 0 ? (netPnL / starting) * 100 : 0;
       return {
         startingBalance: starting,
-        currentBalance: current,
+        currentBalance,
         netPnL,
         netPnLPercentage,
         currency: selectedAccount.currency || 'USD',
@@ -370,17 +377,17 @@ export function useTradingAccounts() {
 
     // All Accounts aggregate
     const starting = accounts.reduce((sum, a) => sum + (Number(a.starting_balance) || 0), 0);
-    const current = accounts.reduce((sum, a) => sum + (Number(a.current_balance) || 0), 0);
-    const netPnL = current - starting;
+    const netPnL = trades.reduce((sum, t) => sum + (Number(t.net_pnl) || 0), 0);
+    const currentBalance = starting + netPnL;
     const netPnLPercentage = starting > 0 ? (netPnL / starting) * 100 : 0;
     return {
       startingBalance: starting,
-      currentBalance: current,
+      currentBalance,
       netPnL,
       netPnLPercentage,
       currency: accounts[0]?.currency || 'USD',
     };
-  }, [accounts, selectedAccount]);
+  }, [accounts, selectedAccount, trades]);
 
   return {
     accounts,

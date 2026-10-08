@@ -84,34 +84,40 @@ describe('Trading Account Zod Validation', () => {
   });
 });
 
-describe('Account P&L Calculations', () => {
+describe('Account P&L and Balance Calculations', () => {
   it('correctly calculates initial flat performance', () => {
     const startingBalance = 50000;
-    const currentBalance = 50000;
-    const netPnL = currentBalance - startingBalance;
+    const netPnL = 0;
+    const currentBalance = startingBalance + netPnL;
     const netPnLPercentage = startingBalance > 0 ? (netPnL / startingBalance) * 100 : 0;
 
+    expect(currentBalance).toBe(50000);
     expect(netPnL).toBe(0);
     expect(netPnLPercentage).toBe(0);
   });
 
-  it('correctly calculates positive return', () => {
+  it('correctly derives current balance as Starting Balance + Total Net P&L', () => {
     const startingBalance = 50000;
-    const currentBalance = 53250;
-    const netPnL = currentBalance - startingBalance;
-    const netPnLPercentage = (netPnL / startingBalance) * 100;
+    const netPnL = 2000;
+    const currentBalance = startingBalance + netPnL;
 
-    expect(netPnL).toBe(3250);
-    expect(netPnLPercentage).toBeCloseTo(6.5, 5);
+    expect(currentBalance).toBe(52000);
   });
 
-  it('correctly calculates drawdown', () => {
-    const startingBalance = 100000;
-    const currentBalance = 96500;
-    const netPnL = currentBalance - startingBalance;
-    const netPnLPercentage = (netPnL / startingBalance) * 100;
+  it('maintains correct net P&L and updates current balance when starting balance changes', () => {
+    const netPnL = 2000;
+    
+    // Old starting balance
+    const oldStarting = 50000;
+    const oldCurrent = oldStarting + netPnL;
+    expect(oldCurrent).toBe(52000);
 
-    expect(netPnL).toBe(-3500);
-    expect(netPnLPercentage).toBeCloseTo(-3.5, 5);
+    // New starting balance (e.g., changed from $50k to $100k)
+    const newStarting = 100000;
+    const newCurrent = newStarting + netPnL;
+
+    expect(newStarting).toBe(100000);
+    expect(netPnL).toBe(2000); // Net P&L must remain unchanged
+    expect(newCurrent).toBe(102000); // Current Balance becomes 102,000 without artificial P&L
   });
 });

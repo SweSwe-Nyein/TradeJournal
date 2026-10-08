@@ -39,6 +39,7 @@ export type TradeWithAccount = Trade & {
  * Normalized trade calculation payload
  */
 export interface TradeCalculationInputs {
+  symbol: string;
   direction: TradeDirection;
   entry_price: number;
   exit_price?: number | null;
