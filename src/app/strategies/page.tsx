@@ -441,7 +441,7 @@ export function StrategiesPage() {
           {/* Add Tag Inline Form */}
           <Card className="bg-zinc-900/40">
             <CardContent className="p-4">
-              <form onSubmit={handleAddTag} className="flex flex-col sm:flex-row gap-3 items-end sm:items-center">
+              <form onSubmit={handleAddTag} className="flex flex-col sm:flex-row gap-3 items-end sm:items-end">
                 <div className="w-full sm:flex-1 space-y-1">
                   <label className="text-xs font-medium text-zinc-300 font-sans">
                     Create New Execution Tag
@@ -503,7 +503,7 @@ export function StrategiesPage() {
           {/* Add Mistake Inline Form */}
           <Card className="bg-zinc-900/40">
             <CardContent className="p-4">
-              <form onSubmit={handleAddMistake} className="flex flex-col sm:flex-row gap-3 items-end sm:items-center">
+              <form onSubmit={handleAddMistake} className="flex flex-col sm:flex-row gap-3 items-end sm:items-end">
                 <div className="w-full sm:flex-1 space-y-1">
                   <label className="text-xs font-medium text-zinc-300 font-sans">
                     Record New Execution Mistake Pattern

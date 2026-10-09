@@ -3,26 +3,45 @@ import { roundToDecimals } from './rounding';
 export type AssetClass = 'forex' | 'commodity' | 'index' | 'crypto' | 'stock';
 
 export function getAssetClass(symbol: string): AssetClass {
-  const sym = symbol.toUpperCase();
-  if (['XAUUSD', 'XAGUSD'].includes(sym)) return 'commodity';
-  if (['WTI', 'XTIUSD'].includes(sym)) return 'commodity';
-  if (['US30', 'NAS100', 'SPX500', 'GER40'].includes(sym)) return 'index';
-  if (['BTCUSD', 'ETHUSD'].includes(sym)) return 'crypto';
-  if (['AAPL', 'TSLA', 'AMZN', 'GOOGL', 'MSFT'].includes(sym)) return 'stock';
-  return 'forex';
+  const sym = (symbol || '').toUpperCase().trim().replace(/[^A-Z0-9]/g, '');
+  if (!sym) return 'stock';
+  if (['XAUUSD', 'XAGUSD', 'GOLD', 'SILVER'].includes(sym)) return 'commodity';
+  if (['WTI', 'XTIUSD', 'USOIL', 'BRENT', 'CL'].includes(sym)) return 'commodity';
+  if (
+    ['US30', 'NAS100', 'SPX500', 'GER40', 'NQ', 'ES', 'YM', 'RTY', 'DAX', 'DOW'].includes(sym) ||
+    sym.startsWith('NQ') ||
+    sym.startsWith('ES')
+  ) {
+    return 'index';
+  }
+  if (['BTCUSD', 'ETHUSD', 'SOLUSD', 'BTC', 'ETH'].includes(sym)) return 'crypto';
+
+  // Standard 6-character forex pairs composed of standard currencies
+  const forexCurrencies = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD', 'SEK', 'NOK', 'SGD', 'HKD', 'ZAR', 'TRY', 'MXN', 'CNH'];
+  if (sym.length === 6) {
+    const base = sym.substring(0, 3);
+    const quote = sym.substring(3, 6);
+    if (forexCurrencies.includes(base) && forexCurrencies.includes(quote)) {
+      return 'forex';
+    }
+  }
+
+  return 'stock';
 }
 
 export function getPipSize(symbol: string): number {
-  const sym = symbol.toUpperCase();
-  if (sym.includes('JPY')) return 0.01;
+  const sym = (symbol || '').toUpperCase().trim().replace(/[^A-Z0-9]/g, '');
   const assetClass = getAssetClass(symbol);
-  if (assetClass === 'commodity' && sym === 'XAUUSD') return 0.1;
-  if (assetClass === 'index' || assetClass === 'stock') return 1;
-  return 0.0001;
+  if (assetClass === 'forex') {
+    if (sym.includes('JPY')) return 0.01;
+    return 0.0001;
+  }
+  if (assetClass === 'commodity' && (sym === 'XAUUSD' || sym === 'GOLD')) return 0.1;
+  return 1;
 }
 
 export function getPipValue(symbol: string, price: number, usdJpyRate: number = 158.0): number {
-  const sym = symbol.toUpperCase();
+  const sym = (symbol || '').toUpperCase().trim().replace(/[^A-Z0-9]/g, '');
   const assetClass = getAssetClass(symbol);
 
   if (assetClass === 'forex') {
@@ -32,13 +51,13 @@ export function getPipValue(symbol: string, price: number, usdJpyRate: number = 
   }
   
   if (assetClass === 'commodity') {
-    if (sym === 'XAUUSD') return 10; // $10 per pip
-    if (['WTI', 'XTIUSD'].includes(sym)) return 10; // Based on $1/bbl
+    if (sym === 'XAUUSD' || sym === 'GOLD') return 10; // $10 per pip (0.10 move per 100oz)
+    return 1;
   }
 
   if (assetClass === 'index' || assetClass === 'stock' || assetClass === 'crypto') return 1;
 
-  return 10; // Default fallback
+  return 1;
 }
 
 export function calculateGrossPnL(

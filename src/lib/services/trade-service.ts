@@ -73,7 +73,7 @@ export class TradeService {
     tradeData: Omit<
       TradeInsert,
       'id' | 'user_id' | 'gross_pnl' | 'net_pnl' | 'r_multiple' | 'created_at' | 'updated_at'
-    >
+    > & { gross_pnl?: number | null }
   ): Promise<{ data: TradeWithAccount | null; error: Error | null }> {
     if (!userId) {
       return { data: null, error: new Error('User ID is required to create a trade') };
@@ -93,6 +93,13 @@ export class TradeService {
       fees: tradeData.fees ?? 0,
       swap: tradeData.swap ?? 0,
       risk_amount: tradeData.risk_amount ?? null,
+      gross_pnl:
+        (tradeData as any).gross_pnl !== undefined &&
+        (tradeData as any).gross_pnl !== null &&
+        (tradeData as any).gross_pnl !== '' &&
+        !isNaN(Number((tradeData as any).gross_pnl))
+          ? Number((tradeData as any).gross_pnl)
+          : undefined,
     });
 
     // Resolve strategies, tags, mistakes
@@ -499,6 +506,13 @@ export class TradeService {
     const fees = updates.fees !== undefined ? updates.fees : current.fees;
     const swap = updates.swap !== undefined ? updates.swap : current.swap;
     const riskAmount = updates.risk_amount !== undefined ? updates.risk_amount : current.risk_amount;
+    const grossPnL =
+      updates.gross_pnl !== undefined &&
+      updates.gross_pnl !== null &&
+      updates.gross_pnl !== ('' as unknown as number) &&
+      !isNaN(Number(updates.gross_pnl))
+        ? Number(updates.gross_pnl)
+        : undefined;
 
     const metrics = calculateTradeMetrics({
       symbol: updates.symbol ?? current.symbol,
@@ -510,6 +524,7 @@ export class TradeService {
       fees,
       swap,
       risk_amount: riskAmount,
+      gross_pnl: grossPnL,
     });
 
     // Resolve strategies, tags, mistakes

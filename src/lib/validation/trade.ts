@@ -61,6 +61,10 @@ export const tradeFormSchema = z
     swap: z
       .number()
       .default(0),
+    gross_pnl: z
+      .number()
+      .optional()
+      .nullable(),
     risk_amount: z
       .number()
       .min(0, 'Planned risk amount cannot be negative')

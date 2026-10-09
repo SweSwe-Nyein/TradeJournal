@@ -105,6 +105,39 @@ describe('Trade Calculation Engine', () => {
       expect(calculateGrossPnL('AAPL', 'long', NaN, 105, 10)).toBe(0);
     });
 
+    it('respects manual Gross P&L override to adjust conversion rates and recalculates Net P&L and R-Multiple', () => {
+      // User manually overrides EURJPY or USDJPY Gross P&L to 864.19
+      const metricsWithOverride = calculateTradeMetrics({
+        symbol: 'USDJPY',
+        direction: 'long',
+        entry_price: 158.222,
+        exit_price: 158.294,
+        quantity: 19,
+        commission: 10,
+        risk_amount: 500,
+        gross_pnl: 864.19,
+      });
+
+      expect(metricsWithOverride.gross_pnl).toBe(864.19);
+      expect(metricsWithOverride.net_pnl).toBe(854.19); // 864.19 - 10
+      expect(metricsWithOverride.r_multiple).toBe(1.71); // 854.19 / 500 = 1.708 rounded to 1.71
+
+      // When gross_pnl is undefined or null, it auto-calculates
+      const metricsAuto = calculateTradeMetrics({
+        symbol: 'AAPL',
+        direction: 'long',
+        entry_price: 100,
+        exit_price: 110,
+        quantity: 5,
+        commission: 2,
+        risk_amount: 25,
+      });
+
+      expect(metricsAuto.gross_pnl).toBe(50); // (110 - 100) * 5
+      expect(metricsAuto.net_pnl).toBe(48); // 50 - 2
+      expect(metricsAuto.r_multiple).toBe(1.92); // 48 / 25
+    });
+
     it('preserves decimal accuracy with roundToDecimals', () => {
       // 0.1 + 0.2 floating point anomaly
       expect(roundToDecimals(0.1 + 0.2, 2)).toBe(0.3);

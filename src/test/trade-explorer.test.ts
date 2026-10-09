@@ -355,6 +355,18 @@ describe('Trade Explorer & Trade Service Integration', () => {
     expect(updated.data?.gross_pnl).toBe(400);
     expect(updated.data?.net_pnl).toBe(385); // 400 - 10 - 5
     expect(updated.data?.r_multiple).toBe(3.85); // 385 / 100
+
+    // Now edit again with manual gross P&L override to adjust for exchange conversion rate
+    const overridden = await TradeService.updateTrade(userId, created.data!.id, {
+      gross_pnl: 450.5, // user manual override
+      commission: 15,
+      fees: 5,
+    });
+
+    expect(overridden.error).toBeNull();
+    expect(overridden.data?.gross_pnl).toBe(450.5);
+    expect(overridden.data?.net_pnl).toBe(430.5); // 450.5 - 15 - 5
+    expect(overridden.data?.r_multiple).toBe(4.31); // 430.5 / 100 = 4.305 rounded to 4.31
   });
 
   it('deletes a trade and removes it from query results', async () => {

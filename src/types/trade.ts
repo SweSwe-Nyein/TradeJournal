@@ -49,6 +49,7 @@ export interface TradeCalculationInputs {
   swap?: number;
   risk_amount?: number | null;
   usdJpyRate?: number;
+  gross_pnl?: number | null;
 }
 
 /**

@@ -13,7 +13,7 @@ import { Button } from '@/src/components/ui/button';
 import { Input } from '@/src/components/ui/input';
 import { Label } from '@/src/components/ui/label';
 import { tradeFormSchema, type TradeFormData, type TradeFormInput } from '@/src/lib/validation/trade';
-import { calculateTradeMetrics } from '@/src/lib/calculations/trades';
+import { calculateTradeMetrics, calculateGrossPnL } from '@/src/lib/calculations/trades';
 import { calculateSlPrice, calculateTpPrice, calculatePipsFromPrices } from '@/src/lib/calculations/pips';
 import { formatCurrency } from '@/src/lib/formatting/currency';
 import type { TradeWithAccount } from '@/src/types/trade';
@@ -99,6 +99,7 @@ export function TradeFormDialog({
       commission: 0,
       fees: 0,
       swap: 0,
+      gross_pnl: undefined,
       risk_amount: undefined,
       risk_percentage: undefined,
       status: 'closed',
@@ -120,6 +121,7 @@ export function TradeFormDialog({
   const watchedExitPrice = watch('exit_price');
   const watchedQuantity = watch('quantity');
   const watchedCommission = watch('commission');
+  const watchedGrossPnl = watch('gross_pnl');
   const watchedRiskAmount = watch('risk_amount');
   const watchedRiskPercentage = watch('risk_percentage');
   const watchedStatus = watch('status');
@@ -172,7 +174,39 @@ export function TradeFormDialog({
     }
   }, [open, loadMetadata]);
 
-  // Live P&L Calculation Preview
+  // Automatic calculation of Gross P&L based on asset class, pricing, lots, and exchange rules
+  const autoGrossPnL = useMemo(() => {
+    if (!watchedEntryPrice || !watchedQuantity || watchedEntryPrice <= 0 || watchedQuantity <= 0) {
+      return 0;
+    }
+    return calculateGrossPnL(
+      watchedSymbol,
+      watchedDirection,
+      Number(watchedEntryPrice),
+      watchedExitPrice ? Number(watchedExitPrice) : null,
+      Number(watchedQuantity)
+    );
+  }, [
+    watchedSymbol,
+    watchedDirection,
+    watchedEntryPrice,
+    watchedExitPrice,
+    watchedQuantity,
+  ]);
+
+  // Check if user manually typed/overrode Gross P&L
+  const isGrossOverridden = useMemo(() => {
+    return (
+      watchedGrossPnl !== undefined &&
+      watchedGrossPnl !== null &&
+      (watchedGrossPnl as unknown as string) !== '' &&
+      !isNaN(Number(watchedGrossPnl))
+    );
+  }, [watchedGrossPnl]);
+
+  const effectiveGrossPnL = isGrossOverridden ? Number(watchedGrossPnl) : autoGrossPnL;
+
+  // Live P&L Calculation Preview: automatically recalculates Net P&L and R-Multiple in real-time
   const liveMetrics = useMemo(() => {
     if (!watchedEntryPrice || !watchedQuantity || watchedEntryPrice <= 0 || watchedQuantity <= 0) {
       return { gross_pnl: 0, net_pnl: 0, r_multiple: null };
@@ -188,6 +222,7 @@ export function TradeFormDialog({
       fees: 0,
       swap: 0,
       risk_amount: watchedRiskAmount ? Number(watchedRiskAmount) : null,
+      gross_pnl: isGrossOverridden ? Number(watchedGrossPnl) : undefined,
     });
   }, [
     watchedSymbol,
@@ -197,6 +232,8 @@ export function TradeFormDialog({
     watchedQuantity,
     watchedCommission,
     watchedRiskAmount,
+    isGrossOverridden,
+    watchedGrossPnl,
   ]);
 
   useEffect(() => {
@@ -255,6 +292,20 @@ export function TradeFormDialog({
         const accBal = Number(tradeToEdit.account?.starting_balance) || 10000;
         const riskPct = riskAmt && accBal > 0 ? Number(((riskAmt / accBal) * 100).toFixed(2)) : undefined;
 
+        const expectedAutoGross = calculateGrossPnL(
+          sym,
+          tradeToEdit.direction,
+          entryP,
+          tradeToEdit.exit_price ? Number(tradeToEdit.exit_price) : null,
+          Number(tradeToEdit.quantity)
+        );
+
+        // If tradeToEdit.gross_pnl was previously customized or differs from the standard auto-calculation, preserve as explicit override
+        const hasCustomOverride =
+          tradeToEdit.gross_pnl !== undefined &&
+          tradeToEdit.gross_pnl !== null &&
+          Math.abs(Number(tradeToEdit.gross_pnl) - expectedAutoGross) > 0.05;
+
         reset({
           trading_account_id: tradeToEdit.trading_account_id,
           symbol: tradeToEdit.symbol,
@@ -269,6 +320,7 @@ export function TradeFormDialog({
           commission: Number(tradeToEdit.commission) || 0,
           fees: 0,
           swap: 0,
+          gross_pnl: hasCustomOverride ? Number(tradeToEdit.gross_pnl) : undefined,
           risk_amount: riskAmt,
           risk_percentage: riskPct,
           status: tradeToEdit.status,
@@ -306,6 +358,7 @@ export function TradeFormDialog({
           commission: 0,
           fees: 0,
           swap: 0,
+          gross_pnl: undefined,
           risk_amount: undefined,
           risk_percentage: undefined,
           status: 'closed',
@@ -375,6 +428,7 @@ export function TradeFormDialog({
     // Format timestamps to ISO strings
     const payload: TradeFormData = {
       ...data,
+      gross_pnl: effectiveGrossPnL,
       stop_loss: absSl,
       take_profit: absTp,
       entry_time: entryDateTime,
@@ -650,67 +704,121 @@ export function TradeFormDialog({
             </div>
           </div>
 
-          {/* Planned Risk Section ($ + %) & Commission */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-zinc-900/50 border border-zinc-800 rounded-lg">
-            <div className="space-y-1.5">
-              <Label htmlFor="trade-risk-amt" className="text-zinc-200">Planned Risk ($)</Label>
-              <Input
-                id="trade-risk-amt"
-                type="number"
-                step="any"
-                placeholder="100.00"
-                value={watchedRiskAmount !== undefined && watchedRiskAmount !== null && !isNaN(watchedRiskAmount as number) ? watchedRiskAmount : ''}
-                onChange={(e) => {
-                  const val = e.target.value === '' ? undefined : Number(e.target.value);
-                  handleRiskAmountChange(val);
-                }}
-                className="font-mono bg-zinc-950"
-              />
-              {errors.risk_amount && (
-                <p className="text-[11px] text-red-400">{errors.risk_amount.message}</p>
-              )}
+          {/* Planned Risk Section ($ + %), Commission & Gross P&L Override */}
+          <div className="p-3.5 bg-zinc-900/50 border border-zinc-800 rounded-lg space-y-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="trade-risk-amt" className="text-zinc-200">Planned Risk ($)</Label>
+                <Input
+                  id="trade-risk-amt"
+                  type="number"
+                  step="any"
+                  placeholder="100.00"
+                  value={watchedRiskAmount !== undefined && watchedRiskAmount !== null && !isNaN(watchedRiskAmount as number) ? watchedRiskAmount : ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? undefined : Number(e.target.value);
+                    handleRiskAmountChange(val);
+                  }}
+                  className="font-mono bg-zinc-950"
+                />
+                {errors.risk_amount && (
+                  <p className="text-[11px] text-red-400">{errors.risk_amount.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="trade-risk-pct" className="text-zinc-200">Planned Risk (%)</Label>
+                <Input
+                  id="trade-risk-pct"
+                  type="number"
+                  step="any"
+                  placeholder="1.00"
+                  value={watchedRiskPercentage !== undefined && watchedRiskPercentage !== null && !isNaN(watchedRiskPercentage as number) ? watchedRiskPercentage : ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? undefined : Number(e.target.value);
+                    handleRiskPercentageChange(val);
+                  }}
+                  className="font-mono bg-zinc-950"
+                />
+                {errors.risk_percentage && (
+                  <p className="text-[11px] text-red-400">{errors.risk_percentage.message}</p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="trade-comm">Commission ($)</Label>
+                <Input
+                  id="trade-comm"
+                  type="number"
+                  step="any"
+                  placeholder="4.50"
+                  {...register('commission', { valueAsNumber: true })}
+                  className="font-mono bg-zinc-950"
+                />
+                {errors.commission && (
+                  <p className="text-[11px] text-red-400">{errors.commission.message}</p>
+                )}
+              </div>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="trade-risk-pct" className="text-zinc-200">Planned Risk (%)</Label>
-              <Input
-                id="trade-risk-pct"
-                type="number"
-                step="any"
-                placeholder="1.00"
-                value={watchedRiskPercentage !== undefined && watchedRiskPercentage !== null && !isNaN(watchedRiskPercentage as number) ? watchedRiskPercentage : ''}
-                onChange={(e) => {
-                  const val = e.target.value === '' ? undefined : Number(e.target.value);
-                  handleRiskPercentageChange(val);
-                }}
-                className="font-mono bg-zinc-950"
-              />
-              {errors.risk_percentage && (
-                <p className="text-[11px] text-red-400">{errors.risk_percentage.message}</p>
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="trade-comm">Commission ($)</Label>
-              <Input
-                id="trade-comm"
-                type="number"
-                step="any"
-                placeholder="4.50"
-                {...register('commission', { valueAsNumber: true })}
-                className="font-mono bg-zinc-950"
-              />
-              {errors.commission && (
-                <p className="text-[11px] text-red-400">{errors.commission.message}</p>
-              )}
+            {/* Optional / Editable Gross P&L field */}
+            <div className="pt-2.5 border-t border-zinc-800/80">
+              <div className="flex items-center justify-between mb-1.5">
+                <Label htmlFor="trade-gross-pnl" className="text-zinc-200 flex items-center gap-1.5">
+                  <span>Gross P&amp;L ($)</span>
+                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded border ${
+                    isGrossOverridden
+                      ? 'bg-amber-950/80 text-amber-300 border-amber-800/80'
+                      : 'bg-zinc-800 text-zinc-400 border-zinc-700/60'
+                  }`}>
+                    {isGrossOverridden ? 'Manual Override' : 'Auto-Calculated'}
+                  </span>
+                </Label>
+                {isGrossOverridden && (
+                  <button
+                    type="button"
+                    onClick={() => setValue('gross_pnl', undefined, { shouldValidate: true })}
+                    className="text-[10px] text-emerald-400 hover:text-emerald-300 underline font-mono cursor-pointer transition-colors"
+                  >
+                    Reset to auto ({formatCurrency(autoGrossPnL, { showSign: true })})
+                  </button>
+                )}
+              </div>
+              <div className="relative">
+                <Input
+                  id="trade-gross-pnl"
+                  type="number"
+                  step="any"
+                  placeholder={autoGrossPnL ? autoGrossPnL.toFixed(2) : '0.00'}
+                  value={watchedGrossPnl !== undefined && watchedGrossPnl !== null ? watchedGrossPnl : ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? undefined : Number(e.target.value);
+                    setValue('gross_pnl', val, { shouldValidate: true });
+                  }}
+                  className="font-mono bg-zinc-950 pr-24"
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-zinc-500 font-mono pointer-events-none">
+                  {isGrossOverridden ? 'OVERRIDE' : 'AUTO'}
+                </div>
+              </div>
+              <p className="text-[10px] text-zinc-400 mt-1">
+                Editable field: Adjust Gross P&amp;L directly to override conversion rates or broker statement differences. Clear to revert to auto-calculation.
+              </p>
             </div>
           </div>
 
           {/* Real-time Calculation Preview Card */}
           <div className="p-3.5 rounded-lg bg-zinc-900 border border-zinc-800 text-xs">
-            <div className="flex items-center gap-1.5 text-zinc-400 font-mono mb-2">
-              <Calculator className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Calculated Trade Summary</span>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5 text-zinc-400 font-mono">
+                <Calculator className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Calculated Trade Summary</span>
+              </div>
+              {isGrossOverridden && (
+                <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1">
+                  ● Manual override applied
+                </span>
+              )}
             </div>
             <div className="grid grid-cols-3 gap-3 font-mono text-center">
               <div>

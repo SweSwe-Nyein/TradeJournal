@@ -1,4 +1,5 @@
-export { roundToDecimals } from './rounding';
+import { roundToDecimals } from './rounding';
+export { roundToDecimals };
 import { calculateGrossPnL as engineGross, calculateNetPnL as engineNet, calculateRMultiple as engineR } from './tradingCalculations';
 import type { TradeDirection, TradeCalculationInputs, TradeCalculationResults } from '@/src/types/trade';
 
@@ -34,14 +35,17 @@ export function calculateRMultiple(
 }
 
 export function calculateTradeMetrics(inputs: TradeCalculationInputs): TradeCalculationResults {
-  const grossPnL = calculateGrossPnL(
-    inputs.symbol,
-    inputs.direction,
-    inputs.entry_price,
-    inputs.exit_price ?? null,
-    inputs.quantity,
-    inputs.usdJpyRate
-  );
+  const grossPnL =
+    inputs.gross_pnl !== undefined && inputs.gross_pnl !== null && Number.isFinite(inputs.gross_pnl)
+      ? roundToDecimals(Number(inputs.gross_pnl), 2)
+      : calculateGrossPnL(
+          inputs.symbol,
+          inputs.direction,
+          inputs.entry_price,
+          inputs.exit_price ?? null,
+          inputs.quantity,
+          inputs.usdJpyRate
+        );
   const netPnL = calculateNetPnL(grossPnL, inputs.commission ?? 0, inputs.fees ?? 0, inputs.swap ?? 0);
   const rMultiple = calculateRMultiple(netPnL, inputs.risk_amount ?? 0);
   return { gross_pnl: grossPnL, net_pnl: netPnL, r_multiple: rMultiple };
