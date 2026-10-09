@@ -214,6 +214,7 @@ export function normalizeCsvRow(
       fees,
       swap,
       risk_amount: riskAmount,
+      usdJpyRate: undefined
     });
     grossPnL = metrics.gross_pnl;
     netPnL = metrics.net_pnl;

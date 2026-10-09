@@ -21,12 +21,13 @@ export function getPipSize(symbol: string): number {
   return 0.0001;
 }
 
-export function getPipValue(symbol: string, price: number): number {
+export function getPipValue(symbol: string, price: number, usdJpyRate: number = 158.0): number {
   const sym = symbol.toUpperCase();
   const assetClass = getAssetClass(symbol);
 
   if (assetClass === 'forex') {
-    if (sym.includes('JPY')) return (0.01 / price) * 100000;
+    if (sym === 'USDJPY') return (0.01 / price) * 100000;
+    if (sym.endsWith('JPY')) return (0.01 / usdJpyRate) * 100000; // Cross-JPY: Convert using USDJPY rate
     return 10; // Standard USD quote
   }
   
@@ -45,10 +46,13 @@ export function calculateGrossPnL(
   direction: 'long' | 'short',
   entryPrice: number,
   exitPrice: number,
-  quantity: number
+  quantity: number,
+  usdJpyRate?: number
 ): number {
   const pipSize = getPipSize(symbol);
-  const pipValue = getPipValue(symbol, exitPrice);
+  // Use provided rate or fallback to 158.0
+  const rate = usdJpyRate || 158.0;
+  const pipValue = getPipValue(symbol, exitPrice, rate);
 
   const priceDelta = direction === 'long' ? exitPrice - entryPrice : entryPrice - exitPrice;
   const pipsGained = priceDelta / pipSize;

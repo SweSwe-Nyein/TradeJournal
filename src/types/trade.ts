@@ -48,6 +48,7 @@ export interface TradeCalculationInputs {
   fees?: number;
   swap?: number;
   risk_amount?: number | null;
+  usdJpyRate?: number;
 }
 
 /**

@@ -7,12 +7,13 @@ export function calculateGrossPnL(
   direction: TradeDirection,
   entryPrice: number,
   exitPrice: number | null | undefined,
-  quantity: number
+  quantity: number,
+  usdJpyRate?: number
 ): number {
   if (exitPrice === null || exitPrice === undefined || !Number.isFinite(entryPrice) || !Number.isFinite(exitPrice) || !Number.isFinite(quantity) || entryPrice <= 0 || exitPrice <= 0 || quantity <= 0) {
     return 0;
   }
-  return engineGross(symbol, direction, entryPrice, exitPrice, quantity);
+  return engineGross(symbol, direction, entryPrice, exitPrice, quantity, usdJpyRate);
 }
 
 export function calculateNetPnL(
@@ -38,7 +39,8 @@ export function calculateTradeMetrics(inputs: TradeCalculationInputs): TradeCalc
     inputs.direction,
     inputs.entry_price,
     inputs.exit_price ?? null,
-    inputs.quantity
+    inputs.quantity,
+    inputs.usdJpyRate
   );
   const netPnL = calculateNetPnL(grossPnL, inputs.commission ?? 0, inputs.fees ?? 0, inputs.swap ?? 0);
   const rMultiple = calculateRMultiple(netPnL, inputs.risk_amount ?? 0);
