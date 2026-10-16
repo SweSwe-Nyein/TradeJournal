@@ -6,6 +6,7 @@ import { Button } from '@/src/components/ui/button';
 import { BookOpen, Plus, Calendar, Smile, Frown, Meh, Star, ArrowRight, ShieldAlert } from 'lucide-react';
 import { useAuth } from '@/src/hooks/useAuth';
 import { JournalService, type JournalEntry } from '@/src/lib/services/journal-service';
+import { MarkdownRenderer } from '@/src/components/ui/markdown-renderer';
 
 export function JournalPage() {
   const { user } = useAuth();
@@ -145,9 +146,12 @@ export function JournalPage() {
                     </h4>
                   )}
 
-                  <p className="text-[11px] text-zinc-400 line-clamp-2">
-                    {entry.content}
-                  </p>
+                  <div className="text-[11px] text-zinc-400 font-sans my-1">
+                    <MarkdownRenderer
+                      content={entry.content}
+                      className="text-[11px]"
+                    />
+                  </div>
 
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-850/60 text-[10px] font-mono text-zinc-500">
                     <span>Discipline: {entry.discipline_score ? `${entry.discipline_score}/5` : 'N/A'}</span>

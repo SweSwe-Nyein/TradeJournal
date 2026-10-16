@@ -61,6 +61,35 @@ describe('Strategy, Tag, and Mistake System', () => {
       expect(updateRes.data?.description).toBe('Updated criteria: 2 standard deviation band touch');
     });
 
+    it('saves and preserves full Markdown formatted descriptions', async () => {
+      const markdownDesc = `# Setup: Opening Range Breakout
+## Core Triggers
+- 5m candle close above initial balance
+- Volume > 1.5x 20 EMA
+- Directional alignment with higher timeframe
+
+### Risk Parameters
+1. Max risk: 1% account
+2. Stop loss: Range low
+3. Target: 2R extension
+
+[Documentation](https://example.com/playbook)
+***
+*Strict discipline required.*`;
+
+      const created = await StrategyService.createStrategy(userA, {
+        name: 'Markdown Playbook',
+        description: markdownDesc,
+      });
+
+      expect(created.data).toBeDefined();
+      expect(created.data?.description).toBe(markdownDesc);
+
+      const fetched = await StrategyService.listStrategies(userA);
+      const found = fetched.data.find((s) => s.id === created.data?.id);
+      expect(found?.description).toBe(markdownDesc);
+    });
+
     it('deletes an existing strategy', async () => {
       const created = await StrategyService.createStrategy(userA, {
         name: 'Temp Strategy',

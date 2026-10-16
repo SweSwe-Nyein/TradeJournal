@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { DatabaseSetupModal } from '@/src/components/database/database-setup-modal';
 import { checkDatabaseStatus, type DatabaseStatus } from '@/src/lib/supabase/db-status';
+import { MarkdownRenderer } from '@/src/components/ui/markdown-renderer';
 
 export function StrategiesPage() {
   const { user } = useAuth();
@@ -380,9 +381,9 @@ export function StrategiesPage() {
                         {strat.name}
                       </CardTitle>
                       {strat.description ? (
-                        <p className="text-xs text-zinc-400 line-clamp-2 mt-1 leading-relaxed font-sans">
-                          {strat.description}
-                        </p>
+                        <div className="mt-2 text-xs text-zinc-300 font-sans break-words overflow-hidden">
+                          <MarkdownRenderer content={strat.description} />
+                        </div>
                       ) : (
                         <p className="text-xs text-zinc-600 italic mt-1 font-sans">
                           No description provided.

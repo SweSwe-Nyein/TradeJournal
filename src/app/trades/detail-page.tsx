@@ -14,6 +14,7 @@ import { Button } from '@/src/components/ui/button';
 import { TradeFormDialog } from '@/src/components/trades/trade-form-dialog';
 import { DeleteTradeDialog } from '@/src/components/trades/delete-trade-dialog';
 import { TradeScreenshots } from '@/src/components/trades/trade-screenshots';
+import { MarkdownRenderer } from '@/src/components/ui/markdown-renderer';
 import {
   ArrowLeft,
   Pencil,
@@ -421,9 +422,12 @@ export function TradeDetailPage() {
                     >
                       <span className="font-semibold">{strat.name}</span>
                       {strat.description && (
-                        <p className="text-[10px] text-zinc-400 mt-0.5 line-clamp-2 font-sans">
-                          {strat.description}
-                        </p>
+                        <div className="mt-1 text-[11px] text-zinc-300 font-sans border-t border-emerald-800/40 pt-1">
+                          <MarkdownRenderer
+                            content={strat.description}
+                            className="text-[11px]"
+                          />
+                        </div>
                       )}
                     </div>
                   ))}
@@ -501,8 +505,8 @@ export function TradeDetailPage() {
           <div>
             <span className="text-xs font-mono text-zinc-400 block mb-1.5">Trader Notes</span>
             {trade.notes ? (
-              <div className="p-4 rounded-md bg-zinc-900/60 border border-zinc-850 text-xs text-zinc-200 leading-relaxed whitespace-pre-wrap font-sans">
-                {trade.notes}
+              <div className="p-4 rounded-md bg-zinc-900/60 border border-zinc-850 text-xs text-zinc-200 leading-relaxed font-sans">
+                <MarkdownRenderer content={trade.notes} />
               </div>
             ) : (
               <div className="p-4 rounded-md border border-dashed border-zinc-850 text-xs text-zinc-500 text-center">
@@ -517,57 +521,7 @@ export function TradeDetailPage() {
       <TradeScreenshots userId={user?.id || ''} tradeId={trade.id} />
 
       {/* Trade Plan & Post-Mortem Review */}
-      <Card>
-        <CardHeader className="pb-3 border-b border-zinc-850">
-          <div className="flex items-center gap-2">
-            <Target className="w-4 h-4 text-emerald-400" />
-            <CardTitle className="text-sm font-medium">Trade Plan &amp; Post-Mortem Review</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <h4 className="text-xs font-mono uppercase tracking-wider text-emerald-400 border-b border-zinc-850 pb-1">
-              Trade Plan
-            </h4>
-            <div className="space-y-3 text-xs">
-              <div>
-                <span className="text-zinc-400 font-mono block mb-1">Why did I enter?</span>
-                <p className="text-zinc-200 bg-zinc-950/40 border border-zinc-850 p-2.5 rounded font-sans">
-                  {trade.notes || 'No entry rationale recorded.'}
-                </p>
-              </div>
-              <div>
-                <span className="text-zinc-400 font-mono block mb-1">Setup &amp; Catalyst</span>
-                <p className="text-zinc-200 bg-zinc-950/40 border border-zinc-850 p-2.5 rounded font-sans">
-                  {trade.strategies?.[0]?.description || trade.strategy || 'Standard playbook setup.'}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <h4 className="text-xs font-mono uppercase tracking-wider text-sky-400 border-b border-zinc-850 pb-1">
-              Trade Review &amp; Psychology
-            </h4>
-            <div className="space-y-3 text-xs">
-              <div>
-                <span className="text-zinc-400 font-mono block mb-1">Execution &amp; Discipline Check</span>
-                <p className="text-zinc-200 bg-zinc-950/40 border border-zinc-850 p-2.5 rounded font-sans">
-                  {trade.mistakes_list && trade.mistakes_list.length > 0
-                    ? `Violations noted: ${trade.mistakes_list.map((m) => m.name).join(', ')}`
-                    : 'Executed cleanly according to plan rules.'}
-                </p>
-              </div>
-              <div>
-                <span className="text-zinc-400 font-mono block mb-1">What would I change tomorrow?</span>
-                <p className="text-zinc-200 bg-zinc-950/40 border border-zinc-850 p-2.5 rounded font-sans">
-                  Review trade logs regularly to refine patience and stop-loss management.
-                </p>
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      
 
       {/* Edit Dialog */}
       <TradeFormDialog

@@ -81,3 +81,20 @@ describe('Supabase Client Configuration', () => {
     expect(typeof config.isConfigured).toBe('boolean');
   });
 });
+
+describe('Markdown Renderer Components', () => {
+  it('provides comprehensive markdown components configuration', async () => {
+    const { defaultMarkdownComponents } = await import('@/src/components/ui/markdown-renderer');
+    expect(defaultMarkdownComponents).toBeDefined();
+    expect(typeof defaultMarkdownComponents.h1).toBe('function');
+    expect(typeof defaultMarkdownComponents.h2).toBe('function');
+    expect(typeof defaultMarkdownComponents.p).toBe('function');
+    expect(typeof defaultMarkdownComponents.ul).toBe('function');
+    expect(typeof defaultMarkdownComponents.ol).toBe('function');
+    expect(typeof defaultMarkdownComponents.strong).toBe('function');
+    expect(typeof defaultMarkdownComponents.em).toBe('function');
+    expect(typeof defaultMarkdownComponents.code).toBe('function');
+    expect(typeof defaultMarkdownComponents.a).toBe('function');
+  });
+});
+
