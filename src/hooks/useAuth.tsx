@@ -180,7 +180,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       id: demoUser.id,
       full_name: 'Alex Trader',
       avatar_url: null,
-      timezone: 'America/New_York',
+      timezone: 'Asia/Bangkok',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -230,7 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             await supabase.from('profiles').upsert({
               id: data.user.id,
               full_name: fullName,
-              timezone: 'UTC',
+              timezone: 'Asia/Bangkok',
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             });
@@ -269,7 +269,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       id: demoUser.id,
       full_name: fullName,
       avatar_url: null,
-      timezone: 'UTC',
+      timezone: 'Asia/Bangkok',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };

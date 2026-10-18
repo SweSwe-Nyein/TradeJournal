@@ -25,6 +25,11 @@ import { MistakeService } from '@/src/lib/services/mistake-service';
 import { useAuth } from '@/src/hooks/useAuth';
 import { SearchableMultiSelect } from '@/src/components/ui/searchable-multi-select';
 import { AlertCircle, LineChart, Calculator } from 'lucide-react';
+import {
+  parseStoredTimestampToBangkok,
+  convertBangkokInputToDatabaseISO,
+  getNowInBangkok,
+} from '@/src/lib/formatting/timezone';
 
 interface TradeFormDialogProps {
   open: boolean;
@@ -59,17 +64,11 @@ export function TradeFormDialog({
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [selectedMistakeIds, setSelectedMistakeIds] = useState<string[]>([]);
 
-  // Strict 24-hour time state variables (HH:mm format)
-  const [entryDate, setEntryDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
-  const [entryTime, setEntryTime] = useState<string>(() => {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  });
-  const [exitDate, setExitDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
-  const [exitTime, setExitTime] = useState<string>(() => {
-    const d = new Date();
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-  });
+  // Strict 24-hour time state variables (HH:mm format) standardized to Asia/Bangkok (UTC+7)
+  const [entryDate, setEntryDate] = useState<string>(() => getNowInBangkok().date);
+  const [entryTime, setEntryTime] = useState<string>(() => getNowInBangkok().time);
+  const [exitDate, setExitDate] = useState<string>(() => getNowInBangkok().date);
+  const [exitTime, setExitTime] = useState<string>(() => getNowInBangkok().time);
 
   const defaultAccount =
     defaultAccountId && defaultAccountId !== 'all'
@@ -267,19 +266,18 @@ export function TradeFormDialog({
         setSelectedTagIds(initialTagIds);
         setSelectedMistakeIds(initialMistakeIds);
 
-        // Entry & exit time parsing
-        const entryD = tradeToEdit.entry_time ? new Date(tradeToEdit.entry_time) : new Date();
-        if (!isNaN(entryD.getTime())) {
-          setEntryDate(entryD.toISOString().slice(0, 10));
-          setEntryTime(`${String(entryD.getHours()).padStart(2, '0')}:${String(entryD.getMinutes()).padStart(2, '0')}`);
-        }
+        // Entry & exit time parsing without double-applying timezone offsets
+        const entryParts = parseStoredTimestampToBangkok(tradeToEdit.entry_time);
+        setEntryDate(entryParts.date);
+        setEntryTime(entryParts.time);
 
         if (tradeToEdit.exit_time) {
-          const exitD = new Date(tradeToEdit.exit_time);
-          if (!isNaN(exitD.getTime())) {
-            setExitDate(exitD.toISOString().slice(0, 10));
-            setExitTime(`${String(exitD.getHours()).padStart(2, '0')}:${String(exitD.getMinutes()).padStart(2, '0')}`);
-          }
+          const exitParts = parseStoredTimestampToBangkok(tradeToEdit.exit_time);
+          setExitDate(exitParts.date);
+          setExitTime(exitParts.time);
+        } else {
+          setExitDate(entryParts.date);
+          setExitTime('');
         }
 
         // Convert absolute SL/TP prices from DB to pips for form display
@@ -338,18 +336,21 @@ export function TradeFormDialog({
         setSelectedTagIds([]);
         setSelectedMistakeIds([]);
 
-        const now = new Date();
-        setEntryDate(now.toISOString().slice(0, 10));
-        setEntryTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
-        setExitDate(now.toISOString().slice(0, 10));
-        setExitTime(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+        const nowBangkok = getNowInBangkok();
+        setEntryDate(nowBangkok.date);
+        setEntryTime(nowBangkok.time);
+        setExitDate(nowBangkok.date);
+        setExitTime(nowBangkok.time);
+
+        const defaultEntryIso = convertBangkokInputToDatabaseISO(nowBangkok.date, nowBangkok.time);
+        const defaultExitIso = convertBangkokInputToDatabaseISO(nowBangkok.date, nowBangkok.time);
 
         reset({
           trading_account_id: defaultAccount,
           symbol: '',
           direction: 'long',
-          entry_time: new Date().toISOString(),
-          exit_time: new Date().toISOString(),
+          entry_time: defaultEntryIso,
+          exit_time: defaultExitIso,
           entry_price: undefined as unknown as number,
           exit_price: undefined as unknown as number,
           quantity: 1,
@@ -421,9 +422,15 @@ export function TradeFormDialog({
     const validEntryTime = timeRegex.test(entryTime) ? entryTime : '09:30';
     const validExitTime = timeRegex.test(exitTime) ? exitTime : '16:00';
 
-    // Construct ISO timestamps from strict 24h entryDate/entryTime and exitDate/exitTime
-    const entryDateTime = `${entryDate || new Date().toISOString().slice(0, 10)}T${validEntryTime}:00Z`;
-    const exitDateTime = watchedStatus === 'closed' && exitDate && exitTime ? `${exitDate}T${validExitTime}:00Z` : null;
+    // Construct ISO timestamps with explicit Asia/Bangkok (+07:00) offset for database storage
+    const entryDateTime = convertBangkokInputToDatabaseISO(
+      entryDate || getNowInBangkok().date,
+      validEntryTime
+    );
+    const exitDateTime =
+      watchedStatus === 'closed' && exitDate && exitTime
+        ? convertBangkokInputToDatabaseISO(exitDate, validExitTime)
+        : null;
 
     // Format timestamps to ISO strings
     const payload: TradeFormData = {
@@ -607,7 +614,7 @@ export function TradeFormDialog({
             <div className="space-y-1.5">
               <Label className="flex items-center justify-between">
                 <span>Entry Time (24h) *</span>
-                <span className="text-[10px] text-emerald-400 font-mono">e.g. 09:30 or 13:45</span>
+                <span className="text-[10px] text-emerald-400 font-mono">Asia/Bangkok (UTC+7)</span>
               </Label>
               <div className="grid grid-cols-2 gap-2">
                 <Input
@@ -628,7 +635,7 @@ export function TradeFormDialog({
                       setEntryTime(raw);
                     }
                   }}
-                  placeholder="13:45"
+                  placeholder="14:15"
                   className="font-mono text-xs bg-zinc-950 text-center"
                 />
               </div>
@@ -640,7 +647,7 @@ export function TradeFormDialog({
             <div className="space-y-1.5">
               <Label className="flex items-center justify-between">
                 <span>Exit Time (24h) {watchedStatus === 'closed' ? '*' : '(Optional)'}</span>
-                <span className="text-[10px] text-emerald-400 font-mono">e.g. 16:20 or 21:05</span>
+                <span className="text-[10px] text-emerald-400 font-mono">Asia/Bangkok (UTC+7)</span>
               </Label>
               <div className="grid grid-cols-2 gap-2">
                 <Input

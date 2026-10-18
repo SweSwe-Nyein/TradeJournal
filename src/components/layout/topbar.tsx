@@ -17,6 +17,8 @@ const routeTitles: Record<string, string> = {
   '/analytics': 'Performance Analytics',
   '/journal': 'Trading Journal',
   '/strategies': 'Strategy Playbook',
+  '/forex-confirmation': 'Forex Confirmation',
+  '/forex': 'Forex Confirmation',
   '/settings': 'Account Settings',
   '/import': 'CSV Trade Import',
 };

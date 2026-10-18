@@ -11,6 +11,7 @@ import {
   Upload,
   LogOut,
   LineChart,
+  Compass,
   User as UserIcon,
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
@@ -25,6 +26,7 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Trades', href: '/trades', icon: Layers },
+  // { name: 'Forex Confirmation', href: '/forex-confirmation', icon: Compass },
   { name: 'Import', href: '/import', icon: Upload },
   { name: 'Calendar', href: '/calendar', icon: CalendarDays },
   { name: 'Analytics', href: '/analytics', icon: BarChart3 },

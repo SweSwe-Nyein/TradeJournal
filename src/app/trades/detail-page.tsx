@@ -37,7 +37,7 @@ export function TradeDetailPage() {
   const { user, profile } = useAuth();
   const { accounts } = useTradingAccounts();
 
-  const userTimezone = profile?.timezone || 'UTC';
+  const userTimezone = profile?.timezone || 'Asia/Bangkok';
 
   const [trade, setTrade] = useState<TradeWithAccount | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -321,14 +321,14 @@ export function TradeDetailPage() {
             <div>
               <span className="text-zinc-400 text-[11px] block">Entry Time (24h)</span>
               <span className="text-zinc-200 tabular-nums">
-                {formatDate(trade.entry_time)} {formatTime24(trade.entry_time, userTimezone)}
+                {formatDate(trade.entry_time, undefined, userTimezone)} {formatTime24(trade.entry_time, userTimezone)}
               </span>
             </div>
 
             <div>
               <span className="text-zinc-400 text-[11px] block">Exit Time (24h)</span>
               <span className="text-zinc-200 tabular-nums">
-                {trade.exit_time ? `${formatDate(trade.exit_time)} ${formatTime24(trade.exit_time, userTimezone)}` : 'Open'}
+                {trade.exit_time ? `${formatDate(trade.exit_time, undefined, userTimezone)} ${formatTime24(trade.exit_time, userTimezone)}` : 'Open'}
               </span>
             </div>
 

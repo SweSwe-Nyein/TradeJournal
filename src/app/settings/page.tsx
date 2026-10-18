@@ -24,6 +24,7 @@ import {
 } from '@/src/lib/supabase/db-status';
 
 const commonTimezones = [
+  'Asia/Bangkok',
   'UTC',
   'America/New_York',
   'America/Chicago',
@@ -42,7 +43,7 @@ export function SettingsPage() {
   const { isConfigured, url } = getSupabaseConfig();
 
   const [fullName, setFullName] = useState('');
-  const [timezone, setTimezone] = useState('UTC');
+  const [timezone, setTimezone] = useState('Asia/Bangkok');
   const [currency, setCurrency] = useState('USD');
   const [dateFormat, setDateFormat] = useState('YYYY-MM-DD');
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -74,7 +75,7 @@ export function SettingsPage() {
   useEffect(() => {
     if (profile) {
       setFullName(profile.full_name || '');
-      setTimezone(profile.timezone || 'UTC');
+      setTimezone(profile.timezone || 'Asia/Bangkok');
       setCurrency(profile.currency || 'USD');
       setDateFormat(profile.date_format || 'YYYY-MM-DD');
     } else if (user?.user_metadata?.full_name) {

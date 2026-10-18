@@ -15,6 +15,7 @@ import { AnalyticsPage } from '@/src/app/analytics/page';
 import { JournalPage } from '@/src/app/journal/page';
 import { JournalDetailPage } from '@/src/app/journal/detail-page';
 import { StrategiesPage } from '@/src/app/strategies/page';
+import { ForexConfirmationPage } from '@/src/app/forex/page';
 import { SettingsPage } from '@/src/app/settings/page';
 import { ImportPage } from '@/src/app/import/page';
 import { NotFoundPage } from '@/src/app/not-found/page';
@@ -36,6 +37,8 @@ export default function App() {
                 <Route path="/dashboard" element={<DashboardPage />} />
                 <Route path="/trades" element={<TradesPage />} />
                 <Route path="/trades/:id" element={<TradeDetailPage />} />
+                <Route path="/forex-confirmation" element={<ForexConfirmationPage />} />
+                <Route path="/forex" element={<Navigate to="/forex-confirmation" replace />} />
                 <Route path="/calendar" element={<CalendarPage />} />
                 <Route path="/analytics" element={<AnalyticsPage />} />
                 <Route path="/journal" element={<JournalPage />} />
