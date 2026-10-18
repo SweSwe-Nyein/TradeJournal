@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { forexRouter } from './src/server/forex-router';
-import { startForexScheduler } from './src/server/forex-scheduler';
 
 dotenv.config();
 
@@ -18,9 +17,6 @@ app.use(express.json());
 // Mount API routes
 app.use('/api/forex', forexRouter);
 app.use('/api/cron', forexRouter);
-
-// Start the background 15-minute Forex scheduler
-startForexScheduler();
 
 const isProduction = process.env.NODE_ENV === 'production';
 
